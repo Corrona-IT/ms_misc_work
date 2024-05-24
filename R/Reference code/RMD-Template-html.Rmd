@@ -1,0 +1,74 @@
+---
+title: ""
+subtitle: ""
+author: "Ziyu Huang"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: readable
+    toc: true
+    toc_float: true
+    number_sections: true
+    fontsize: 12pt
+    geometry: margin=1in
+---
+
+
+
+```{r set-options, echo=FALSE, cache=FALSE}
+# Clear environment
+rm(list=ls())
+
+# Chunk options
+knitr::opts_chunk$set(comment=NA, echo=FALSE)
+
+# Some colors
+
+```
+
+
+```{r packages, message=FALSE}
+# 
+# 
+# library(skimr)
+# 
+
+# library(broom)
+#library(Epi)
+# 
+
+# library(lme4)
+
+## Load Love-boost then the packages
+# source(here("R", "Love-boost.R"))
+# library(here)
+# library(survival)
+# library(survminer)
+# library(magrittr)
+#library(data.table)
+#library(tableone)
+# library(naniar)
+# library(janitor)
+# library(readxl)
+
+library(tidyverse)
+
+theme_set(theme_bw())
+
+```
+
+```{r data import}
+
+```
+
+
+# Summary
+
+
+
+
+# Session Information
+```{r session information, include=FALSE}
+sessionInfo()
+```
+
