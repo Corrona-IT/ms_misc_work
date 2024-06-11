@@ -50,7 +50,9 @@ knitr::opts_chunk$set(comment=NA, echo=FALSE)
 #library(tableone)
 # library(naniar)
 # library(janitor)
-# library(readxl)
+library(readxl)
+library(openxlsx)
+library(ggrepel)
 library(haven)
 library(tidyverse)
 
@@ -61,11 +63,15 @@ theme_set(theme_bw())
 ```{r paths and parameters}
 myinput = "~/../../Corrona LLC/Biostat Data Files - MS/monthly/2024/2024-05-05/final/ms_dmlabimg_2024-05-05.dta"
 myoutput = NULL
+myspecs = "~/../../Corrona LLC/Biostat Data Files - MS/DQ checks/specs/ms_labtest_range.xlsx"
+myresults = "~/../../Corrona LLC/Biostat Data Files - MS/DQ checks/reports/ms_dmlabimg nc00 labtest range checks.xlsx"
 ```
 
 
 ```{r data import}
 df.raw <- read_dta(myinput)
+df.specs <- read_xlsx(myspecs)
+df.out <- read_xlsx(myresults)
 ```
 
 
@@ -124,6 +130,161 @@ summary_df %>% knitr::kable(digits = 2)
 
 Setting a lower bound of range check to be 10% means we will see `r summary_df[1,2]` observations in the report, which accounts for `r round(summary_df[1,3],2)`% of the observations.
 
+## Summary of other variables
+
+```{r}
+within_bounds <- function(value, bounds) {
+  bounds <- str_remove_all(bounds, "\\[|\\]") %>% str_split(",") %>% unlist()  %>% str_trim()%>% as.numeric()
+  lower <- bounds[1]
+  upper <- bounds[2]
+  return(value >= lower & value <= upper)
+}
+
+# Split df.specs into two parts
+df.specs_with_dec <- df.specs %>% filter(!is.na(event_type_dec))
+df.specs_no_dec <- df.specs %>% filter(is.na(event_type_dec))
+
+# Join df.raw with df.specs_with_dec
+report_with_dec <- df.raw %>%
+  inner_join(df.specs_with_dec, by = c("eventtypedesc", "event_type_dec")) %>%
+  rowwise() %>%
+  mutate(within_bounds = within_bounds(result.x, result.y)) %>%
+  ungroup() %>%
+  mutate(failure = if_else(within_bounds, 0, 1, missing = 1))
+
+# Join df.raw with df.specs_no_dec using only eventtypedesc
+report_no_dec <- df.raw %>%
+  inner_join(df.specs_no_dec, by = "eventtypedesc") %>%
+  rowwise() %>%
+  mutate(within_bounds = within_bounds(result.x, result.y)) %>%
+  ungroup() %>%
+  mutate(failure = if_else(within_bounds, 0, 1, missing = 1))
+
+# Combine the two reports
+combined_report <- bind_rows(report_with_dec, report_no_dec)
+
+# Summarise the combined report
+final_report <- combined_report %>%
+  group_by(eventtypedesc, event_type_dec) %>%
+  summarise(
+    failures = sum(failure, na.rm = TRUE), 
+    total_observations = n(),
+    .groups = "drop"
+  ) %>% 
+  mutate(
+    temp = failures / total_observations,
+    percent_failure = glue::glue("{round((failures / total_observations) * 100, 1)}%")
+  ) %>% 
+  arrange(desc(temp)) %>% 
+  select(-temp)
+knitr::kable(final_report)
+```
+
+## Jitter plots
+
+
+```{r}
+# Create a list to store the plots
+plot_list <- list()
+
+# Get the unique event types
+event_types <- unique(df.out$event_type_dec)
+
+# Iterate through each event type and create a jitter plot with horizontal lines and labels next to the y-axis
+for (event in event_types) {
+  # Filter the data for the current event type
+  event_data <- df.out %>% filter(event_type_dec == event)
+  
+  # Create the jitter plot
+  plot <- ggplot(event_data, aes(x = event_type_dec, y = result)) +
+    geom_jitter(width = 0.2, height = 0, alpha = 0.5) +
+    geom_hline(aes(yintercept = lowerBound), color = "blue", linetype = "dashed") +
+    geom_hline(aes(yintercept = upperBound), color = "red", linetype = "dashed") +
+    geom_text(aes(x = 0.6, y = lowerBound, label = paste("Lower Bound:", lowerBound)),
+              vjust = 1, color = "blue", size = 4) +
+    geom_text(aes(x = 1.4, y = upperBound, label = paste("Upper Bound:", upperBound)),
+               vjust = -1, color = "red", size = 4) +
+    labs(title = paste("Jitter Plot of Result for Test Type:", event),
+         x = "Test Type",
+         y = "Result") +
+    theme_minimal() +
+    theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+  
+  # Add the plot to the list
+  plot_list[[event]] <- plot
+}
+
+# Display all plots
+for (event in event_types) {
+  print(plot_list[[event]])
+}
+
+
+
+```
+
+```{r}
+
+# Filter out rows where failure is 1 (out of bounds)
+out_of_bounds <- combined_report %>%
+  filter(failure == 1) %>%
+  arrange(eventtypedesc, event_type_dec, result.x)
+
+# Generate a list of data frames, one for each event type
+out_of_bounds_list <- out_of_bounds %>%
+  group_by(eventtypedesc, event_type_dec) %>%
+  group_split()
+
+# Optionally, name each data frame in the list for easy reference
+names(out_of_bounds_list) <- out_of_bounds %>%
+  group_by(eventtypedesc, event_type_dec) %>%
+  group_keys() %>%
+  mutate(name = paste(eventtypedesc, event_type_dec, sep = "_")) %>%
+  pull(name)
+
+```
+
+
+```{r}
+# Load the necessary package
+
+
+# Create a new workbook
+wb <- createWorkbook()
+
+# Function to truncate sheet names to a maximum of 31 characters
+truncate_sheet_name <- function(name) {
+  if (nchar(name) > 31) {
+    return(substr(name, 1, 31))
+  } else {
+    return(name)
+  }
+}
+
+# Add each data frame in out_of_bounds_list to a new sheet
+for (name in names(out_of_bounds_list)) {
+  # Clean and truncate the sheet name to ensure it's valid
+  sheet_name <- str_replace_all(name, "[^[:alnum:]_]", "_")
+  sheet_name <- truncate_sheet_name(sheet_name)
+  
+  # Select only the required columns
+  selected_columns <- out_of_bounds_list[[name]] %>%
+    select(eventtypedesc, event_type_dec, result.x, result.y)
+  
+  # Add a new sheet to the workbook
+  addWorksheet(wb, sheet_name)
+  
+  # Write the data frame with selected columns to the sheet
+  writeData(wb, sheet_name, selected_columns)
+}
+
+
+
+# Save the workbook to a file
+saveWorkbook(wb, "../output/out_of_bounds_report.xlsx", overwrite = TRUE)
+
+
+```
 
 # Session Information
 ```{r session information, include=T}
