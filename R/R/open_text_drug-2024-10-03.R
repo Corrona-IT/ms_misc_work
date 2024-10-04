@@ -47,7 +47,9 @@ df.lookup.ms <- readxl::read_xlsx(path, sheet = 1) %>%
   filter(!is.na(as.numeric(freq)))
 df.lookup.nonms <- readxl::read_xlsx(path, sheet = 2)
   
-
+## Save the data as csv files in sharepoint
+write_csv(df.drug, "../../../Corrona LLC/Biostat Data Files - MS/documentation/Open text field drug/drugDosages.csv")
+write_csv(df.dm_drug_eventLog, "../../../Corrona LLC/Biostat Data Files - MS/documentation/Open text field drug/eventLog.csv")
 # Analysis
 
 # get the tabulation for df.drug
