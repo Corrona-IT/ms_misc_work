@@ -32,7 +32,10 @@ df.drug <- dbGetQuery(
   myconn,
   glue("SELECT* FROM [RCC_MS700].[drug].[drugDosages]")
 )
-
+df.taediseasmodifyingtherapy <- dbGetQuery(
+  myconn,
+  glue("SELECT* FROM [RCC_MS700].[staging].[taediseasemodifyingtherapy]")
+)
 df.dm_drug_eventLog <- dbGetQuery(
   myconn,
   glue("SELECT* FROM [RCC].[dmMS700drug].[eventLog]")
@@ -50,6 +53,7 @@ df.lookup.nonms <- readxl::read_xlsx(path, sheet = 2)
 ## Save the data as csv files in sharepoint
 write_csv(df.drug, "../../../Corrona LLC/Biostat Data Files - MS/documentation/Open text field drug/drugDosages.csv")
 write_csv(df.dm_drug_eventLog, "../../../Corrona LLC/Biostat Data Files - MS/documentation/Open text field drug/eventLog.csv")
+write.csv(df.taediseasmodifyingtherapy, "../../../Corrona LLC/Biostat Data Files - MS/documentation/Open text field drug/taediseasemodifyingtherapy.csv")
 # Analysis
 
 # get the tabulation for df.drug
